@@ -4,15 +4,12 @@ import joblib
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
-from src.data_preparation import (
-    clean_data,
-    create_preprocessor,
-    prepare_features,
-)
+from src.data_preparation import clean_data, create_preprocessor
 from src.evaluate import (
     compare_models,
-    save_evaluation_figures,
+    save_confusion_matrix,
     save_feature_importance,
+    save_roc_curves,
 )
 from src.train import train_models
 
@@ -21,7 +18,8 @@ def main():
     project_dir = Path(__file__).resolve().parent
     data = pd.read_csv(project_dir / "data" / "telco_churn.csv")
     data = clean_data(data)
-    X, y = prepare_features(data)
+    X = data.drop(columns="Churn")
+    y = data["Churn"]
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.20, random_state=42, stratify=y
     )
@@ -47,12 +45,18 @@ def main():
         f"{feature_count} after preprocessing"
     )
 
+    models_dir = project_dir / "models"
+    models_dir.mkdir(exist_ok=True)
+    joblib.dump(best_pipeline, models_dir / "churn_model.joblib")
+
     reports_dir = project_dir / "reports"
     figures_dir = reports_dir / "figures"
-    report = save_evaluation_figures(
-        pipelines, best_name, X_test, y_test, figures_dir
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    report = save_confusion_matrix(
+        best_pipeline, best_name, X_test, y_test, figures_dir
     )
     print(f"\nClassification report — {best_name}\n{report}")
+    save_roc_curves(pipelines, X_test, y_test, figures_dir)
     importance = save_feature_importance(
         pipelines["Random Forest"], figures_dir
     )
@@ -68,9 +72,6 @@ def main():
         )
     )
 
-    models_dir = project_dir / "models"
-    models_dir.mkdir(exist_ok=True)
-    joblib.dump(best_pipeline, models_dir / "churn_model.joblib")
     print("\nSaved models/churn_model.joblib and results in reports/.")
 
 

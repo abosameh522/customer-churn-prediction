@@ -15,12 +15,6 @@ def clean_data(data):
     return data.drop(columns="customerID")
 
 
-def prepare_features(data):
-    X = data.drop(columns="Churn")
-    y = data["Churn"]
-    return X, y
-
-
 def create_preprocessor(X):
     numerical_features = X.select_dtypes(include="number").columns.tolist()
     categorical_features = X.select_dtypes(exclude="number").columns.tolist()
