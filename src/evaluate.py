@@ -31,9 +31,8 @@ def compare_models(pipelines, X_test, y_test):
     return comparison.reset_index(drop=True)
 
 
-def save_evaluation_figures(pipelines, best_name, X_test, y_test, figures_dir):
-    figures_dir.mkdir(parents=True, exist_ok=True)
-    predictions = pipelines[best_name].predict(X_test)
+def save_confusion_matrix(pipeline, name, X_test, y_test, figures_dir):
+    predictions = pipeline.predict(X_test)
     report = classification_report(
         y_test, predictions, target_names=["Stayed", "Churned"],
         zero_division=0,
@@ -44,11 +43,14 @@ def save_evaluation_figures(pipelines, best_name, X_test, y_test, figures_dir):
         y_test, predictions, display_labels=["Stayed", "Churned"],
         cmap="Blues", colorbar=False, ax=ax,
     )
-    ax.set_title(f"Confusion matrix — {best_name}")
+    ax.set_title(f"Confusion matrix — {name}")
     fig.tight_layout()
     fig.savefig(figures_dir / "confusion_matrix.png", dpi=150)
     plt.close(fig)
+    return report
 
+
+def save_roc_curves(pipelines, X_test, y_test, figures_dir):
     fig, ax = plt.subplots(figsize=(7, 6))
     for name, pipeline in pipelines.items():
         probabilities = pipeline.predict_proba(X_test)[:, 1]
@@ -61,7 +63,6 @@ def save_evaluation_figures(pipelines, best_name, X_test, y_test, figures_dir):
     fig.tight_layout()
     fig.savefig(figures_dir / "roc_curve.png", dpi=150)
     plt.close(fig)
-    return report
 
 
 def save_feature_importance(pipeline, figures_dir):
