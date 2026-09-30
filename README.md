@@ -1,107 +1,124 @@
 # Customer Churn Prediction
 
-## About the Project
+Churn analysis and classification on IBM Telco customer data, with training-only preprocessing pipelines and a comparison of three models.
 
-I built this project to practice data cleaning, EDA, preprocessing,
-classification, and model evaluation. I used the IBM Telco Customer Churn
-dataset to predict whether a customer would leave the company. I compared
-three models and used charts to look for differences between customers who
-stayed and those who churned.
+## Project Overview
 
-## Dataset
+Customer churn is a common business problem: identifying customers likely to leave can support retention work. This project analyzes the IBM Telco dataset, looks at which customer groups churn most, and compares three classifiers for predicting churn.
 
-- [IBM Telco Customer Churn](https://github.com/IBM/telco-customer-churn-on-icp4d/blob/master/data/Telco-Customer-Churn.csv), included in `data/telco_churn.csv`.
-- **7,043 customers** and **19 model input features**, mixing numerical and categorical data.
-- Target: `Churn`, mapped from `Yes`/`No` to 1/0; `customerID` is excluded.
-- `TotalCharges` contained **11 blank values**. I kept all customers.
+The workflow keeps all preprocessing inside each model's pipeline and fits it only on training data, so the test set stays untouched until evaluation.
 
-## Problems I Ran Into
+## Dataset Snapshot
 
-### TotalCharges
+Source: [IBM Telco Customer Churn](https://github.com/IBM/telco-customer-churn-on-icp4d/blob/master/data/Telco-Customer-Churn.csv), included as `data/telco_churn.csv`.
 
-`TotalCharges` looks numerical, but Pandas loaded it as text because of the
-blank strings. I used `pd.to_numeric(errors="coerce")` and filled the missing
-values with a training-set median inside the pipeline. All 11 blanks belonged
-to customers with zero tenure.
+| Item | Value |
+| --- | --- |
+| Customers | 7,043 |
+| Input features | 19 |
+| Target | `Churn` (Yes/No mapped to 1/0) |
+| Churn rate | 26.54% (1,869 churned) |
+| Training / test split | 5,634 / 1,409 |
+| Test-set churners | 374 |
+| Transformed features | 45 after encoding and scaling |
 
-### Class imbalance
+## Workflow
 
-Only **26.54%** of customers churned. Predicting that everyone stays would give
-73.46% accuracy on the full dataset, so I also looked at recall, F1, and ROC-AUC.
+```mermaid
+flowchart LR
+    A[Telco CSV] --> B[Cleaning]
+    B --> C[Preprocessing]
+    C --> D[EDA]
+    D --> E[Model training]
+    E --> F[Evaluation]
+    F --> G[Saved pipeline]
+```
 
-### Model comparison
+## Data Preparation
 
-Logistic Regression and Random Forest were very close in ROC-AUC: **0.8419**
-and **0.8410**. Logistic Regression was slightly better on this split, so I kept it.
+- `TotalCharges` is text in the raw CSV. `pd.to_numeric(errors="coerce")` exposes **11 blank values**, all belonging to customers with zero tenure. All 7,043 customers are kept.
+- `customerID` is dropped; `Churn` is mapped Yes = 1, No = 0.
+- Numerical features get median imputation and `StandardScaler`.
+- Categorical features get one-hot encoding with `handle_unknown="ignore"`.
+- An 80/20 stratified split (`random_state=42`) preserves the churn share in both sets.
+- Imputation, encoding, and scaling are fitted inside each model's pipeline, only on the training data.
 
-## Some Choices I Made
+## Exploratory Analysis
 
-- I used an 80/20 split: **5,634 training rows** and **1,409 test rows**.
-- I used `stratify=y` because churners are the smaller class and I wanted a
-  similar churn percentage in both sets.
-- I used median imputation and `StandardScaler` for the 4 numerical features.
-- I one-hot encoded the 15 categorical features because they have no natural
-  numeric order. `handle_unknown="ignore"` handles categories not seen in training.
-- I kept preprocessing inside each model's pipeline and fitted it only on the
-  training data. This produced **45 transformed features**.
-- I compared a linear model with two tree-based models using fixed settings.
+The notebook (`notebooks/01_eda.ipynb`) checks the data and uses nine charts to compare churn across customer groups. A few stand out:
 
-## Models
+| Group | Churn rate |
+| --- | ---: |
+| Month-to-month contract | 42.71% |
+| Two-year contract | 2.83% |
+| Tenure 0–12 months | 47.44% |
+| Tenure 49–72 months | 9.51% |
+| Electronic check payment | 45.29% |
+| Fiber optic internet | 41.89% |
+| No technical support | 41.64% |
+| No online security | 41.77% |
 
-- Logistic Regression: `max_iter=1000`
-- Decision Tree: `max_depth=5`
-- Random Forest: `n_estimators=200`, `max_depth=10`
+Churned customers also pay more on average (74.44 vs 61.27 in monthly charges), though the distributions overlap, so charges alone do not separate the groups. These are patterns in this dataset, not proof of cause.
 
-All models and the train/test split use `random_state=42`.
+## Model Comparison
 
-## Results
+Held-out test set: 1,409 customers, including 374 churners. Values are from `reports/model_comparison.csv`.
 
-Logistic Regression gave me the highest ROC-AUC at **0.8419**. Its accuracy was
-**80.55%**, but recall was only **55.88%**, so it still misses quite a few churners.
-I saved the complete pipeline as `models/churn_model.joblib`.
-
-| Model | Accuracy | Precision | Recall | F1-score | ROC-AUC |
+| Model | Accuracy | Precision | Recall | F1 | ROC-AUC |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Logistic Regression | 0.8055 | 0.6572 | 0.5588 | 0.6040 | 0.8419 |
 | Decision Tree | 0.7984 | 0.6347 | 0.5668 | 0.5989 | 0.8303 |
 | Random Forest | 0.8027 | 0.6633 | 0.5214 | 0.5838 | 0.8410 |
 
-These values are rounded to four decimal places from `reports/model_comparison.csv`.
-Accuracy counts all correct predictions. Precision tells me how many predicted
-churners actually churned; recall tells me how many actual churners I caught.
-F1 balances precision and recall, while ROC-AUC measures how well the model ranks
-churners above non-churners across thresholds.
+![ROC curves](reports/figures/roc_curve.png)
 
-![Model ROC curves](reports/figures/roc_curve.png)
+![Confusion matrix — Logistic Regression](reports/figures/confusion_matrix.png)
 
-## What I Noticed in the Data
+## Why Logistic Regression?
 
-The notebook contains nine EDA charts. A few patterns stood out:
+Logistic Regression has the highest ROC-AUC (0.8419) on this split, narrowly ahead of Random Forest (0.8410), and keeps the best precision/recall balance among the three. Its recall is still only 55.88%, so it misses a meaningful share of churners. The margin over Random Forest is small, so the choice is specific to this split, not a general conclusion that logistic regression is better for churn.
 
-- Month-to-month churn was 42.71%, compared with 2.83% for two-year contracts.
-- Churn was higher at 0–12 months of tenure (47.44%) than at 49–72 months (9.51%).
-- Churned customers had higher average monthly charges: 74.44 versus 61.27.
-- Customers without technical support or online security had higher churn.
+## Feature Importance
+
+The Random Forest feature importances describe that model, not the selected Logistic Regression, and do not show causation.
+
+![Random Forest feature importance](reports/figures/feature_importance.png)
+
+`tenure` and `TotalCharges` rank highest, followed by the month-to-month contract, `MonthlyCharges`, and the "no" categories for online security and technical support.
+
+## Key Findings
+
+- Contract type is the largest gap: month-to-month customers churn far more than one- or two-year customers.
+- Churn is highest in the first year and falls steadily with tenure.
+- Electronic-check payers churn more than customers on automatic payments.
+- Customers without technical support or online security churn more.
+- Accuracy is a weak guide here because only 26.54% of customers churned; recall, F1, and ROC-AUC carry more signal.
 
 ## Project Structure
 
 ```text
 customer-churn-prediction/
-├── data/telco_churn.csv
-├── notebooks/01_eda.ipynb
+├── data/
+│   └── telco_churn.csv
+├── notebooks/
+│   └── 01_eda.ipynb            # Exploratory analysis
 ├── src/
-│   ├── data_preparation.py
-│   ├── train.py
-│   └── evaluate.py
-├── models/churn_model.joblib
-├── reports/                  # Metrics, classification report, and figures
+│   ├── data_preparation.py     # Cleaning and preprocessing pipeline
+│   ├── train.py                # Model definitions and training
+│   └── evaluate.py             # Metrics and figures
+├── models/
+│   └── churn_model.joblib      # Saved best pipeline
+├── reports/
+│   ├── model_comparison.csv
+│   ├── feature_importance.csv
+│   ├── classification_report.txt
+│   └── figures/
+├── main.py
 ├── requirements.txt
-├── .gitignore
-├── README.md
-└── main.py
+└── README.md
 ```
 
-## Run the Project
+## How to Run
 
 Tested with Python 3.14.7.
 
@@ -109,40 +126,50 @@ Tested with Python 3.14.7.
 git clone https://github.com/abosameh522/customer-churn-prediction.git
 cd customer-churn-prediction
 python -m venv .venv
-```
-
-Activate on Linux/macOS with `source .venv/bin/activate`, or on Windows
-(Command Prompt) with `.venv\Scripts\activate`. Then run:
-
-```bash
-pip install -r requirements.txt
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+python -m pip install -r requirements.txt
 python main.py
 ```
 
-This trains the three models and saves the pipeline, reports, confusion matrix,
-ROC curves, and Random Forest feature-importance plot. Open the notebook with:
+`main.py` trains the three models, prints the comparison, and rewrites the reports, figures, and `models/churn_model.joblib`. To open the analysis notebook:
 
 ```bash
 jupyter notebook notebooks/01_eda.ipynb
 ```
 
-## Project Notes
+## Saved Pipeline
 
-- Using `Pipeline` let me keep preprocessing and the model together instead of
-  manually transforming the training and test sets.
-- Logistic Regression's result was a reminder that a more complicated model
-  is not automatically better on a given split.
-- The Random Forest ranked tenure and TotalCharges highest. Its importances
-  describe that model, not the selected Logistic Regression, and do not show causation.
+`models/churn_model.joblib` stores the selected model together with its fitted preprocessing, so the same pipeline can be loaded and applied to new customer rows without repeating the transformations:
 
-## Notes
+```python
+import joblib
+import pandas as pd
 
-- I used the test split to choose the winner; I have not run cross-validation.
-- The classification threshold is still 0.5, with room to improve churn recall.
-- The EDA describes the full dataset.
+pipeline = joblib.load("models/churn_model.joblib")
+customers = pd.read_csv("data/telco_churn.csv")
+customers["TotalCharges"] = pd.to_numeric(customers["TotalCharges"], errors="coerce")
+customers["Churn"] = customers["Churn"].map({"Yes": 1, "No": 0})
+features = customers.drop(columns=["customerID", "Churn"])
+probabilities = pipeline.predict_proba(features)[:, 1]
+```
 
-## Next Things I Want to Try
+The artifact is tied to the library versions in `requirements.txt`; loading it with very different versions is not guaranteed.
 
-- Use cross-validation instead of relying on one split.
-- Try different classification thresholds on validation data to improve recall.
-- Compare with a boosting model later.
+## Limitations
+
+- The winner is chosen from a single test split; there is no cross-validation.
+- Recall for churners is 55.88%, so many churners are still missed at the 0.5 threshold.
+- The EDA describes the full dataset and churn patterns are associations, not causes.
+- Feature importance is reported for Random Forest, not the selected Logistic Regression.
+- Saved-pipeline compatibility depends on the installed scikit-learn version.
+
+## Future Improvements
+
+- Use cross-validation instead of a single split for model selection.
+- Tune the classification threshold on validation data to improve churn recall.
+- Add a boosting model as an additional comparison.
+- Package the saved pipeline with its exact dependency versions.
+
+## Author
+
+[Ahmed Sameh](https://github.com/abosameh522)
