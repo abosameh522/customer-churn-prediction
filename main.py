@@ -12,6 +12,7 @@ from src.evaluate import (
     save_roc_curves,
 )
 from src.train import train_models
+from src.retention_analysis import run_retention_analysis
 
 
 def main():
@@ -72,6 +73,11 @@ def main():
         )
     )
 
+    priority = run_retention_analysis(
+        best_pipeline, X_test, y_test, reports_dir, figures_dir, best_name
+    )
+    print("\nSimulated retention priority on the test split:")
+    print(priority.to_string(index=False, float_format="{:.4f}".format))
     print("\nSaved models/churn_model.joblib and results in reports/.")
 
 

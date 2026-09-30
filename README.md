@@ -10,7 +10,13 @@ Churn analysis and a comparison of three classifiers on IBM Telco customer data,
 
 Retaining an existing customer is usually cheaper than acquiring a new one, so a churn model is most useful when it can flag at-risk customers early and show which groups they belong to. This project analyzes the IBM Telco dataset, identifies which customer segments churn most, and compares a linear model against two tree-based models for churn classification.
 
-All preprocessing is fitted inside each model's pipeline on the training split only, so the test split is used once, at evaluation. The final pipeline and its evaluation artifacts are saved to disk.
+All preprocessing is fitted on training rows. Evaluation and the ranking analysis below use the same test split. The final pipeline and its evaluation artifacts are saved to disk.
+
+## Business Context
+
+Suppose a retention team can review only part of its customer base. Predicted churn probabilities can provide a priority order for outreach: score customers, rank them from highest to lowest risk, and inspect how many observed churners fall within that review budget.
+
+This project simulates that workflow on historical test rows. No customers were contacted, and no campaign outcomes or financial savings are measured. High churn risk does not establish that a customer will respond to outreach; that would require intervention data.
 
 ## Dataset
 
@@ -82,6 +88,24 @@ Evaluated on the 1,409-row test split (374 churners) at a 0.5 threshold. Values 
 
 Logistic Regression recorded the highest ROC-AUC on this split (0.8419) and the best precision/recall balance of the three, so it is the saved model. The margin over Random Forest (0.8410) is small and specific to this split; the result is not a claim that logistic regression is generally the stronger churn model. Recall is 55.88%, so roughly 44% of churners are still missed at the 0.5 threshold.
 
+## Retention Prioritization
+
+The selected Logistic Regression pipeline ranks the 1,409 test customers by `predict_proba`, without changing the model or its 0.5 classification threshold. The test set contains 374 observed churners.
+
+| Highest-risk share | Customers prioritized | Churners captured | Capture of all churners | Churn rate in group | Lift vs random |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Top 10% | 141 | 105 | 28.07% | 74.47% | 2.81× |
+| Top 20% | 282 | 186 | 49.73% | 65.96% | 2.48× |
+| Top 30% | 423 | 243 | 64.97% | 57.45% | 2.16× |
+
+![Simulated retention ranking: cumulative gains and capture by review budget](reports/figures/cumulative_gains.png)
+
+At a simulated 20% review budget, the ranked group contains 186 of the 374 churners. Random selection would capture about 20% in expectation; this ranking captures 49.73%. That is ranking lift, not an estimate of customers retained.
+
+Cutoffs use the nearest whole number of rows (`round(share * 1409)`). Equal scores retain their input order. Capture is `churners in group / 374`; group precision is `churners in group / group size`; lift divides group precision by the test churn rate (`374 / 1409`). Exact values and actual population fractions are saved in `reports/retention_priority.csv`.
+
+These cutoffs describe the existing test split, not a tuned outreach policy. Model selection already used that split; confirmation on separate data is needed before choosing a review budget.
+
 ## Key Findings
 
 - Contract type is the sharpest split: month-to-month churn is 42.71% versus 2.83% for two-year contracts.
@@ -109,13 +133,15 @@ customer-churn-prediction/
 ├── src/
 │   ├── data_preparation.py     # Cleaning and preprocessing pipeline
 │   ├── train.py                # Model definitions and training
-│   └── evaluate.py             # Metrics, confusion matrix, ROC, importance
+│   ├── evaluate.py             # Metrics, confusion matrix, ROC, importance
+│   └── retention_analysis.py   # Test-set ranking, capture, and gains
 ├── models/
 │   └── churn_model.joblib      # Saved selected pipeline
 ├── reports/
 │   ├── model_comparison.csv
 │   ├── feature_importance.csv
 │   ├── classification_report.txt
+│   ├── retention_priority.csv
 │   └── figures/
 ├── main.py                     # Entry point
 ├── requirements.txt
@@ -154,6 +180,14 @@ jupyter notebook notebooks/01_eda.ipynb
 | Confusion matrix | `reports/figures/confusion_matrix.png` |
 | ROC curves | `reports/figures/roc_curve.png` |
 | Feature importance plot | `reports/figures/feature_importance.png` |
+| Retention capture and lift table | `reports/retention_priority.csv` |
+| Cumulative gains chart | `reports/figures/cumulative_gains.png` |
+
+`python main.py` also regenerates the ranking outputs. Check the capture/lift calculations with:
+
+```bash
+python -m unittest discover -s tests -v
+```
 
 The saved pipeline can be applied to new rows without repeating the transformations:
 
