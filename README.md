@@ -1,10 +1,8 @@
 # Customer Churn Prediction
 
-Churn analysis and a comparison of three classifiers on IBM Telco customer data, with preprocessing kept inside reproducible scikit-learn pipelines.
+Predicting customer churn on the IBM Telco dataset using three scikit-learn classifiers. All preprocessing is handled inside pipelines to prevent data leakage, and the trained model can rank customers by churn probability for retention targeting.
 
-`Python` · `pandas` · `scikit-learn` · `Matplotlib` · `joblib` · `Jupyter`
-
----
+Built with Python, pandas, scikit-learn, Matplotlib, joblib, and Jupyter.
 
 ## Overview
 
@@ -47,7 +45,7 @@ flowchart LR
 
 ## Data Preparation
 
-- `TotalCharges` is stored as text. Converting with `pd.to_numeric(errors="coerce")` exposes 11 blank values, all for customers with zero tenure. No customers are dropped; the pipeline imputes them from the training median.
+- `TotalCharges` is stored as text. Converting with `pd.to_numeric(errors="coerce")` exposes 11 blank values, all for customers with zero tenure. Duplicate customer records are removed. Missing TotalCharges values are imputed from the training median within the pipeline.
 - Identity and target handling: `customerID` is dropped before modeling, and `Churn` is mapped to 1/0.
 - Numerical features receive median imputation and `StandardScaler`; categorical features receive one-hot encoding with `handle_unknown="ignore"`.
 - An 80/20 split is stratified on the target with `random_state=42`, keeping the churn share equal in both sets.
@@ -68,7 +66,7 @@ The notebook `notebooks/01_eda.ipynb` inspects the data and charts churn across 
 | No technical support | 41.64% |
 | No online security | 41.77% |
 
-Churned customers pay more per month on average (74.44 vs 61.27), but the distributions overlap, so charges alone do not separate churners from non-churners. These are associations in this dataset, not evidence of cause.
+Churned customers pay more per month on average (74.44 vs 61.27), but the distributions overlap, so charges alone do not separate churners from non-churners. The relationships above are observed associations in this dataset.
 
 ## Model Comparison
 
@@ -135,6 +133,8 @@ customer-churn-prediction/
 │   ├── train.py                # Model definitions and training
 │   ├── evaluate.py             # Metrics, confusion matrix, ROC, importance
 │   └── retention_analysis.py   # Test-set ranking, capture, and gains
+├── tests/
+│   └── test_retention_analysis.py  # Unit tests for retention metrics
 ├── models/
 │   └── churn_model.joblib      # Saved selected pipeline
 ├── reports/
@@ -145,6 +145,9 @@ customer-churn-prediction/
 │   └── figures/
 ├── main.py                     # Entry point
 ├── requirements.txt
+├── pyproject.toml             # Ruff and pytest configuration
+├── .pre-commit-config.yaml    # Pre-commit hooks
+├── LICENSE
 └── README.md
 ```
 
@@ -216,19 +219,19 @@ The artifact is tied to the library versions in `requirements.txt`; loading it u
 
 ## Limitations
 
-- Model selection uses a single train/test split; there is no cross-validation.
-- The threshold is fixed at 0.5, and churn recall is 55.88%, so many churners are missed.
-- The EDA describes the full dataset, including test rows, so the charts are descriptive rather than held-out.
+- Model selection uses a single train/test split without cross-validation.
+- The threshold is fixed at 0.5, resulting in 55.88% recall (many churners are missed).
+- The EDA describes the full dataset including test rows, so the charts are descriptive rather than held-out validation.
 - Feature importance is reported for Random Forest, not for the selected Logistic Regression.
 - The saved model is version-sensitive and may not load under mismatched scikit-learn versions.
 
 ## Future Improvements
 
-- Add cross-validation to stabilize model selection.
-- Tune the decision threshold on validation data to raise churn recall.
-- Add probability calibration and report a precision/recall curve.
-- Compare against a gradient-boosting model.
-- Add inference tests around the saved pipeline and a small serving wrapper.
+- Use k-fold cross-validation to produce more stable model selection and performance estimates.
+- Tune the decision threshold on a separate validation set to optimize the recall/precision tradeoff for the business case.
+- Add probability calibration (Platt scaling or isotonic regression) and generate precision/recall curves across thresholds.
+- Benchmark against gradient-boosting models (XGBoost, LightGBM, CatBoost) to see if additional complexity improves ROC-AUC.
+- Add integration tests around the saved pipeline artifact and build a minimal inference API or batch scoring script.
 
 ## Author
 
