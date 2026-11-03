@@ -43,7 +43,11 @@ select = [
     "SIM", # flake8-simplify
 ]
 ignore = [
-    "E501",  # line too long (handled by formatter)
+    "E501",   # line too long (handled by formatter)
+    "E402",   # notebook cells set the matplotlib backend before imports
+    "N803",   # X / X_train / X_test are the standard scikit-learn names
+    "N806",   # same convention for local feature matrices
+    "SIM117", # nested `with` for subTest + assertRaises is intentional
 ]
 
 [tool.ruff.lint.isort]
