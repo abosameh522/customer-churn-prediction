@@ -26,14 +26,38 @@ The notebook `notebooks/01_eda.ipynb` covers the exploratory charts (contract ty
 
 ## Dataset and preprocessing
 
-Data: `data/telco_churn.csv` (IBM Telco, 7,043 customers, ~26.5% churn).
+Data source: [IBM Telco Customer Churn](https://github.com/IBM/telco-customer-churn-on-icp4d/blob/master/data/Telco-Customer-Churn.csv), committed as `data/telco_churn.csv`.
 
+| Property | Value |
+|---|---|
+| Customers | 7,043 |
+| Input features | 19 |
+| Churn rate | 26.54% (1,869 churned) |
+| Blank `TotalCharges` | 11, all zero-tenure customers |
+| Duplicate rows | 0 |
+| Training / test rows | 5,634 / 1,409 |
+| Test churners | 374 |
+| Features after encoding | 45 |
+
+Preprocessing facts:
 - `customerID` is dropped before modeling.
 - `TotalCharges` is read as text in the source CSV; 11 blank values become NaN and are imputed with the training median inside the pipeline.
 - Features are split into numeric and categorical, median-imputed, scaled, and one-hot encoded. The preprocessor is fitted only on the training fold, so nothing leaks into evaluation.
 - Class imbalance is handled inside each model pipeline (`class_weight=balanced` or `balanced_subsample`), never by resampling the data outside the pipeline.
 
 All preprocessing, training, threshold tuning, and scoring are inside scikit-learn pipelines.
+
+## Stack
+
+| Layer | Technology | Why |
+|---|---|---|
+| Language | Python 3.11+ | Standard for tabular ML |
+| Dataframes | pandas, numpy | Loading, cleaning, cost calculations |
+| Modeling | scikit-learn | Pipelines keep preprocessing leakage-free |
+| Plots | matplotlib (Agg) | Reproducible figures in CI and headless runs |
+| Notebook | Jupyter | Exploratory analysis kept separate from training code |
+| Testing | pytest + pytest-cov | Offline tests with no dataset or artifact dependency |
+| Lint | Ruff | Fast, replaces flake8 + isort |
 
 ## Results from a real run
 
@@ -106,6 +130,26 @@ Top drivers: `Contract` (month-to-month customers churn far more), `tenure` (sho
 
 The full list, plus per-fold cost curves and thresholds, is in `reports/`.
 
+## Limitations
+
+- The final holdout check is a single 20% split, not new data.
+- Miss cost is an approximation: every missed churner is charged `MonthlyCharges × 12`, regardless of their actual contract horizon.
+- Tuned thresholds (0.05–0.10) send many offers; precision near 0.33 means roughly two of three offers go to customers who would have stayed anyway.
+- The EDA notebook uses the full dataset, so it is descriptive, not held-out validation.
+
+## Roadmap
+
+- [x] Stratified k-fold cross-validation reporting mean and std per metric (`src/retention_cv.py`)
+- [x] Threshold tuning on out-of-fold training probabilities, not the test split
+- [x] Keep the trained model artifact out of git; rebuild it by running the script
+- [ ] Probability calibration and precision/recall curves across thresholds
+- [ ] Contract-aware miss cost instead of a flat 12-month horizon
+- [ ] Batch scoring from the saved pipeline
+
+## License
+
+MIT — see [LICENSE](LICENSE). The Telco dataset keeps its original IBM terms; check them before redistributing.
+
 ## Where to look
 
 - `src/retention_cv.py` — CV, cost-based threshold selection, final holdout check, importance.
@@ -113,4 +157,4 @@ The full list, plus per-fold cost curves and thresholds, is in `reports/`.
 - `src/retention_analysis.py` — ranking and priority tables from `main.py`.
 - `notebooks/01_eda.ipynb` — exploratory analysis.
 - `reports/` — all CSV outputs and figures from this run.
-- `models/churn_model.joblib` — trained Random Forest pipeline.
+- `models/churn_model.joblib` — trained Random Forest pipeline, written by the run (kept out of git; rebuild with `python -m src.retention_cv` or `python main.py`).

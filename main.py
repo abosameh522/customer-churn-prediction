@@ -11,8 +11,8 @@ from src.evaluate import (
     save_feature_importance,
     save_roc_curves,
 )
-from src.train import train_models
 from src.retention_analysis import run_retention_analysis
+from src.train import train_models
 
 
 def main():
