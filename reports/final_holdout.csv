@@ -1,0 +1,2 @@
+Model,Threshold,ROC_AUC,Recall@0.5,Precision@0.5,F1@0.5,Recall@tuned,Precision@tuned,F1@tuned,OffersSent@tuned,ChurnersMissed@tuned,LostRevenue@tuned,OutreachSpend@tuned,TotalCost@0.5,TotalCost@tuned,TestRows
+Random Forest,0.08,0.8387726368544782,0.7379679144385026,0.5390625,0.6230248306997742,0.9866310160427807,0.327708703374778,0.492,1126,5,4175.4,22520.0,89536.0,26695.4,1409
