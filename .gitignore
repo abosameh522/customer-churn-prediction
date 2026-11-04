@@ -41,3 +41,6 @@ build/
 dist/
 *.egg-info/
 
+# Trained model artifacts (large; re-runnable via src/retention_cv.py)
+models/
+

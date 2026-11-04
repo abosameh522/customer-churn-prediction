@@ -50,6 +50,11 @@ ignore = [
     "SIM117", # nested `with` for subTest + assertRaises is intentional
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# scikit-learn convention names design matrices as X, X_train, X_test.
+"src/*.py" = ["N803", "N806"]
+"main.py" = ["N803", "N806"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["src"]
 

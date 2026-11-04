@@ -1,229 +1,160 @@
 # Customer Churn Prediction
 
-A churn classifier on the IBM Telco dataset that compares three scikit-learn models, keeps all preprocessing inside pipelines to avoid leakage, and ranks test customers by churn probability so a retention team can see who to review first.
+This project studies the IBM Telco customer churn dataset and uses churn probabilities to simulate a retention campaign. The focus is business cost: the expense of offering a retention discount to a customer versus the expected revenue lost if a churner is missed.
 
-![Python](https://img.shields.io/badge/python-3.11%2B-blue)
-![scikit-learn](https://img.shields.io/badge/scikit--learn-1.5%2B-orange)
-![License](https://img.shields.io/badge/license-MIT-green)
-![Tests](https://img.shields.io/badge/tests-12%20passed-brightgreen)
+Built with Python, pandas, scikit-learn, Matplotlib, joblib, and Jupyter. No external credit scoring or risk framework; this is pure retention economics.
 
-## Why This Exists
+## Setup
 
-I wanted a project that shows the part of machine learning that matters in a business setting: not just a high score, but a ranked list a team can act on. Retention teams usually have a fixed review budget, so the useful question is "which customers should we look at first?" rather than "what is the accuracy?"
-
-This project answers that question on a public dataset, with honest limits about what the numbers do and do not prove.
-
-## What It Does
-
-- Cleans the Telco CSV, maps `Churn` to 1/0, and drops the customer ID.
-- Builds a scikit-learn `Pipeline` with median imputation, standard scaling, and one-hot encoding, fitted on training rows only.
-- Trains Logistic Regression, Decision Tree, and Random Forest on a stratified 80/20 split.
-- Compares the models with accuracy, precision, recall, F1, and ROC-AUC.
-- Ranks test customers by predicted churn probability and reports capture and lift at 10%, 20%, and 30% review budgets.
-- Saves the selected pipeline and every report and figure under `models/` and `reports/`.
-
-```mermaid
-flowchart LR
-    A[Telco CSV] --> B[Clean and map target]
-    B --> C[Stratified 80/20 split]
-    C --> D[Pipeline: impute, scale, encode]
-    D --> E[Train 3 models]
-    E --> F[Compare metrics]
-    F --> G[Save selected pipeline]
-    F --> H[Rank test customers]
-    H --> I[Capture and lift table]
+```bash
+python -m venv .venv
+source .venv/bin/activate   # or `\.venv\Scripts\activate` on Windows
+pip install -r requirements.txt
 ```
 
-## Data
+## Running the analysis
+
+The main script trains three models, evaluates them with stratified cross-validation, picks the best model by simulated cost, and checks it once on a held-out test split.
+
+```bash
+python -m src.retention_cv
+```
+
+This writes `reports/cv_folds.csv`, `reports/cv_summary.csv`, `reports/final_holdout.csv`, `reports/threshold_cost_curve.csv`, `reports/permutation_importance.csv`, `reports/figures/permutation_importance.png`, and `models/churn_model.joblib`.
+
+The notebook `notebooks/01_eda.ipynb` covers the exploratory charts (contract type, internet service, payment method, tenure, senior status).
+
+## Dataset and preprocessing
+
+Data source: [IBM Telco Customer Churn](https://github.com/IBM/telco-customer-churn-on-icp4d/blob/master/data/Telco-Customer-Churn.csv), committed as `data/telco_churn.csv`.
 
 | Property | Value |
-|----------|-------|
-| Source | IBM Telco Customer Churn (committed at `data/telco_churn.csv`) |
+|---|---|
 | Customers | 7,043 |
 | Input features | 19 |
-| Target | `Churn` (Yes/No → 1/0) |
 | Churn rate | 26.54% (1,869 churned) |
 | Blank `TotalCharges` | 11, all zero-tenure customers |
 | Duplicate rows | 0 |
 | Training / test rows | 5,634 / 1,409 |
 | Test churners | 374 |
-| Features after encoding and scaling | 45 |
+| Features after encoding | 45 |
+
+Preprocessing facts:
+- `customerID` is dropped before modeling.
+- `TotalCharges` is read as text in the source CSV; 11 blank values become NaN and are imputed with the training median inside the pipeline.
+- Features are split into numeric and categorical, median-imputed, scaled, and one-hot encoded. The preprocessor is fitted only on the training fold, so nothing leaks into evaluation.
+- Class imbalance is handled inside each model pipeline (`class_weight=balanced` or `balanced_subsample`), never by resampling the data outside the pipeline.
+
+All preprocessing, training, threshold tuning, and scoring are inside scikit-learn pipelines.
 
 ## Stack
 
 | Layer | Technology | Why |
-|-------|------------|-----|
+|---|---|---|
 | Language | Python 3.11+ | Standard for tabular ML |
-| Dataframes | pandas, numpy | Loading, cleaning, segment checks |
+| Dataframes | pandas, numpy | Loading, cleaning, cost calculations |
 | Modeling | scikit-learn | Pipelines keep preprocessing leakage-free |
-| Artifact | joblib | Saves the fitted pipeline, not just the estimator |
 | Plots | matplotlib (Agg) | Reproducible figures in CI and headless runs |
 | Notebook | Jupyter | Exploratory analysis kept separate from training code |
-| Testing | pytest + pytest-cov | 12 offline tests at 79% coverage |
+| Testing | pytest + pytest-cov | Offline tests with no dataset or artifact dependency |
 | Lint | Ruff | Fast, replaces flake8 + isort |
 
-## Project Tree
+## Results from a real run
 
-```text
-customer-churn-prediction/
-├── data/
-│   └── telco_churn.csv              # Public IBM Telco dataset
-├── notebooks/
-│   └── 01_eda.ipynb                 # Exploratory analysis
-├── src/
-│   ├── data_preparation.py          # Cleaning and preprocessing pipeline
-│   ├── train.py                     # Model definitions and training
-│   ├── evaluate.py                  # Metrics, confusion matrix, ROC, importance
-│   └── retention_analysis.py        # Test-set ranking, capture, and gains
-├── tests/
-│   ├── test_pipeline.py             # 9 offline tests for clean/train/evaluate
-│   └── test_retention_analysis.py   # 3 tests for capture and lift
-├── models/
-│   └── churn_model.joblib           # Saved selected pipeline (8 KB)
-├── reports/
-│   ├── model_comparison.csv
-│   ├── classification_report.txt
-│   ├── feature_importance.csv
-│   ├── retention_priority.csv
-│   └── figures/                     # ROC, confusion matrix, gains, importance
-├── main.py                          # Entry point
-├── requirements.txt
-├── pyproject.toml                   # Ruff and pytest configuration
-├── .pre-commit-config.yaml
-├── LICENSE
-└── README.md
-```
+Stratified 5-fold cross-validation (5 folds, random_state=42), class weights inside the pipeline, threshold chosen per fold from out-of-fold probabilities on the training side only:
 
-## Run
+| Model | ROC-AUC (mean±std) | Recall@0.5 (mean±std) | Recall@tuned (mean±std) | Cost@0.5 | Cost@tuned (mean±std) | Best threshold |
+|---|---|---|---|---|---|---|
+| Logistic Regression | 0.845±0.015 | 0.801±0.017 | 0.987±0.008 | 66,650 | 25,947±1,188 | 0.074 |
+| Random Forest | 0.845±0.014 | 0.738±0.022 | 0.989±0.006 | 89,367 | 25,102±1,310 | 0.070 |
+| HistGradientBoosting | 0.827±0.013 | 0.698±0.017 | 0.955±0.007 | 103,550 | 31,754±1,561 | 0.050 |
 
-Verified on Linux with Python 3.14.8. The commands below were re-run in a fresh virtual environment.
+Models are ranked by mean simulated retention cost, not by ROC-AUC.
 
-```bash
-git clone https://github.com/abosameh522/customer-churn-prediction.git
-cd customer-churn-prediction
-python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
-python -m pip install -r requirements.txt
-python main.py
-```
+Retention economics (per outreach attempt):
+- Offer cost: 20 per contacted customer.
+- Miss cost: `MonthlyCharges × 12` months, the expected revenue at risk if a churner is not kept.
 
-`main.py` loads the CSV, trains all three models, prints the comparison, and rewrites `models/churn_model.joblib` plus every file in `reports/`.
+Selected model: **Random Forest** (lowest mean simulated cost). The cost-based tuned threshold (0.07) cuts expected cost from roughly 89,367 down to roughly 25,102, far more than accuracy or ROC-AUC alone would suggest.
 
-To run the tests and lint:
+Final check on the untouched 20% test split (1,409 customers, Random Forest, threshold 0.08):
 
-```bash
-python -m pytest -q
-ruff check .
-```
+| Metric | Value |
+|---|---|
+| ROC-AUC | 0.839 |
+| Recall@0.5 | 0.738 |
+| Recall@0.08 (tuned) | 0.987 |
+| Precision@0.08 | 0.328 |
+| Churners missed | 5 |
+| Offers sent | 1,126 |
+| Lost revenue | 4,175 |
+| Outreach spend | 22,520 |
+| Total cost @0.5 | 89,536 |
+| Total cost @0.08 | 26,695 |
 
-To open the exploratory notebook:
+## Model comparison
 
-```bash
-jupyter notebook notebooks/01_eda.ipynb
-```
+- **Logistic Regression** catches the most churners at the default 0.5 threshold (recall 0.801) and keeps costs stable, but its tuned cost is slightly above Random Forest.
+- **Random Forest** wins on cost. Its tuned threshold is 0.07, meaning it recommends offers to a much larger share of the base to avoid missing churners.
+- **HistGradientBoosting** performed the worst on this dataset (ROC-AUC 0.827, tuned cost the highest). It did not beat the simpler models here; on imbalanced churn data with this column set, it needs more tuning than I ran. I leave it in for completeness rather than claim it is better.
 
-The saved pipeline can score new rows without repeating the preprocessing:
+Honest note: tuned thresholds around 0.05–0.10 send offers to a large share of customers, so precision drops into the 0.33 range. The model is good at *finding* churners, but the campaign is still expensive per retention. That is the trade-off the cost model makes explicit.
 
-```python
-import joblib
-import pandas as pd
+## Feature importance (Random Forest)
 
-pipeline = joblib.load("models/churn_model.joblib")
-customers = pd.read_csv("data/telco_churn.csv")
-customers["TotalCharges"] = pd.to_numeric(customers["TotalCharges"], errors="coerce")
-customers["Churn"] = customers["Churn"].map({"Yes": 1, "No": 0})
-features = customers.drop(columns=["customerID", "Churn"])
-probabilities = pipeline.predict_proba(features)[:, 1]
-```
-
-## Results
-
-### Model comparison
-
-Test split: 1,409 customers, 374 churners, 0.5 threshold. Source: `reports/model_comparison.csv`.
-
-| Model | Accuracy | Precision | Recall | F1 | ROC-AUC |
-|-------|---------:|----------:|-------:|----:|--------:|
-| Logistic Regression | 0.8055 | 0.6572 | 0.5588 | 0.6040 | 0.8419 |
-| Random Forest | 0.8027 | 0.6633 | 0.5214 | 0.5838 | 0.8410 |
-| Decision Tree | 0.7984 | 0.6347 | 0.5668 | 0.5989 | 0.8303 |
-
-Logistic Regression leads on ROC-AUC, but the gap to Random Forest is 0.0009 on this split. I do not treat that as proof that one model is generally better. Recall is 55.88%, so about 44% of churners are missed at 0.5.
-
-### Retention ranking
-
-The selected pipeline ranks the same 1,409 test customers by predicted probability. Source: `reports/retention_priority.csv`.
-
-| Review budget | Customers reviewed | Churners captured | Capture rate | Precision | Lift vs random |
-|---------------|-------------------:|------------------:|-------------:|----------:|---------------:|
-| Top 10% | 141 | 105 | 28.07% | 74.47% | 2.81× |
-| Top 20% | 282 | 186 | 49.73% | 65.96% | 2.48× |
-| Top 30% | 423 | 243 | 64.97% | 57.45% | 2.16× |
-
-At a 20% review budget the ranked group holds 186 of 374 churners, versus about 20% expected under random selection. That is ranking lift, not a measured retention rate.
-
-### Segment churn rates
-
-Computed from `data/telco_churn.csv`.
-
-| Segment | Churn rate |
-|---------|-----------:|
-| Month-to-month contract | 42.71% |
-| Two-year contract | 2.83% |
-| Tenure 0–12 months | 47.44% |
-| Tenure 49–72 months | 9.51% |
-| Electronic check payment | 45.29% |
-
-### Random Forest feature importance
-
-Source: `reports/feature_importance.csv`. These importances describe the Random Forest, not the selected Logistic Regression.
+Permutation importance on the held-out test split, measured as drop in ROC-AUC when each feature is shuffled. These are real outputs from the run above; higher is more important:
 
 | Feature | Importance |
-|---------|-----------:|
-| tenure | 0.1416 |
-| TotalCharges | 0.1275 |
-| Contract_Month-to-month | 0.0905 |
-| MonthlyCharges | 0.0894 |
+|---|---|
+| Contract | 0.0573 |
+| tenure | 0.0202 |
+| InternetService | 0.0146 |
+| TotalCharges | 0.0118 |
+| OnlineSecurity | 0.0079 |
+| TechSupport | 0.0023 |
+| MonthlyCharges | 0.0013 |
+| PaymentMethod | 0.0010 |
+| OnlineBackup | 0.0010 |
+| PaperlessBilling | 0.0010 |
+| Dependents | 0.0006 |
+| MultipleLines | 0.0005 |
+| StreamingMovies | 0.0005 |
+| SeniorCitizen | 0.0003 |
+| PhoneService | 0.0001 |
+| StreamingTV | -0.0002 |
+| gender | -0.0003 |
+| Partner | -0.0004 |
+| DeviceProtection | -0.0006 |
 
-![ROC curves](reports/figures/roc_curve.png)
+Top drivers: `Contract` (month-to-month customers churn far more), `tenure` (short-tenure risk), `InternetService`, and `TotalCharges`. This matches the EDA: month-to-month contracts and fiber-optic service had the highest churn rates, while 90-day and two-year contracts had low churn. Several features (StreamingTV, Partner, DeviceProtection, Gender) show near-zero or slightly negative importance, meaning they do not help here.
 
-![Cumulative gains](reports/figures/cumulative_gains.png)
-
-## Learned
-
-- **Pipelines are a leakage guard, not a convenience.** Fitting imputation and encoding inside `Pipeline` per model keeps the test split honest.
-- **Accuracy hides the problem** at a 26.54% churn rate; recall, F1, and ROC-AUC tell a more useful story.
-- **Ranking beats a single threshold** when the team has a fixed review budget: capture and lift make the trade-off explicit.
-- **Ties and cutoffs need rules.** Equal scores keep input order, and cutoffs use the nearest whole row, so the table is reproducible.
-- **Selection on one split is fragile.** A 0.0009 AUC gap is not a stable winner.
+The full list, plus per-fold cost curves and thresholds, is in `reports/`.
 
 ## Limitations
 
-- One train/test split, no cross-validation, so metric differences are split-specific.
-- The threshold stays at 0.5; no tuning or calibration is applied.
-- The EDA uses the full dataset, including test rows, so it is descriptive, not held-out validation.
-- Feature importance comes from Random Forest, not the selected model.
-- `models/churn_model.joblib` is committed and tied to the dependency versions in `requirements.txt`.
-- No intervention data, so the project does not estimate retained customers or revenue.
+- The final holdout check is a single 20% split, not new data.
+- Miss cost is an approximation: every missed churner is charged `MonthlyCharges × 12`, regardless of their actual contract horizon.
+- Tuned thresholds (0.05–0.10) send many offers; precision near 0.33 means roughly two of three offers go to customers who would have stayed anyway.
+- The EDA notebook uses the full dataset, so it is descriptive, not held-out validation.
 
 ## Roadmap
 
-- [ ] k-fold cross-validation for stable model selection.
-- [ ] Threshold tuning on a separate validation set.
-- [ ] Probability calibration and precision/recall curves.
-- [ ] Compare gradient-boosting models (XGBoost, LightGBM, CatBoost).
-- [ ] Batch scoring script and a small inference API.
-- [ ] Move the model artifact out of git and rebuild it in CI (separate PR).
-- [ ] Record runtime and inference latency (TODO: fill after a timed run).
+- [x] Stratified k-fold cross-validation reporting mean and std per metric (`src/retention_cv.py`)
+- [x] Threshold tuning on out-of-fold training probabilities, not the test split
+- [x] Keep the trained model artifact out of git; rebuild it by running the script
+- [ ] Probability calibration and precision/recall curves across thresholds
+- [ ] Contract-aware miss cost instead of a flat 12-month horizon
+- [ ] Batch scoring from the saved pipeline
 
 ## License
 
 MIT — see [LICENSE](LICENSE). The Telco dataset keeps its original IBM terms; check them before redistributing.
 
-## Contact
+## Where to look
 
-Ahmed Sameh — Data Engineer & Analyst  
-GitHub: [@abosameh522](https://github.com/abosameh522)  
-Open to Junior Data Engineer / Analytics Engineer roles (remote, Egypt-based).  
-Availability: now (part-time) / full-time after graduation 2027.  
-No visa sponsorship needed for remote roles.
+- `src/retention_cv.py` — CV, cost-based threshold selection, final holdout check, importance.
+- `src/train.py`, `src/evaluate.py`, `src/data_preparation.py` — training, metrics, preprocessing.
+- `src/retention_analysis.py` — ranking and priority tables from `main.py`.
+- `notebooks/01_eda.ipynb` — exploratory analysis.
+- `reports/` — all CSV outputs and figures from this run.
+- `models/churn_model.joblib` — trained Random Forest pipeline, written by the run (kept out of git; rebuild with `python -m src.retention_cv` or `python main.py`).
